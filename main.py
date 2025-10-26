@@ -314,3 +314,45 @@ if __name__ == "__main__":
             print(now_ts(), "⚠️ Exception in main loop:", e)
         print(now_ts(), f"⏳ Sleeping for {SCAN_INTERVAL/60:.1f} minutes...\n")
         time.sleep(SCAN_INTERVAL)
+# -----------------------------
+# 📦 Data Saving (Safe Add-on)
+# -----------------------------
+import json
+from datetime import datetime
+import os
+
+def save_results_to_file(results):
+    """
+    تحفظ نتائج التحليل في ملف JSON محلي دون التأثير على عمل السكربت.
+    """
+    if not results:
+        print("⚠️ لا توجد نتائج لحفظها.")
+        return
+
+    filename = "signals_history.json"
+    filepath = os.path.join(os.path.dirname(__file__), filename)
+
+    # قراءة البيانات القديمة إن وُجدت
+    try:
+        with open(filepath, "r") as f:
+            old_data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        old_data = []
+
+    # إضافة البيانات الجديدة مع الطابع الزمني
+    for r in results:
+        r["saved_at"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        old_data.append(r)
+
+    # حفظ الملف
+    with open(filepath, "w") as f:
+        json.dump(old_data, f, indent=2)
+
+    print(f"✅ تم حفظ {len(results)} إشارة جديدة في {filename}")
+
+# 👇 ضع هذا السطر بعد عملية التحليل مباشرة
+# على سبيل المثال إذا كانت نتائجك تحفظ في متغير اسمه signals أو results
+try:
+    save_results_to_file(signals)
+except Exception as e:
+    print(f"⚠️ حدث خطأ أثناء حفظ النتائج: {e}")
