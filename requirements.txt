@@ -1,17 +1,42 @@
---only-binary=:all:
-pip>=25.1.0
-setuptools>=68.0.0
-wheel>=0.43.0
+# ===========================
+# Smart On-chain Technical Narrative - Stable Build for Render
+# Optimized for Python 3.10 (Lightweight + Fast Deploy)
+# ===========================
 
-# الأساسيات
-pandas==2.2.2
-numpy==1.26.4
+# Core Dependencies
 requests==2.31.0
+pandas==1.5.3
+numpy==1.23.5
 
-# التحليل الفني
-ta==0.10.2
-matplotlib==3.8.4
+# Async & Task Scheduling
+aiohttp==3.9.5
+apscheduler==3.10.4
 
-# الواجهة والنشر
-flask==3.0.3
-gunicorn==21.2.0
+# Telegram Bot Integration
+python-telegram-bot==20.3
+
+# APIs and Parsing
+beautifulsoup4==4.12.3
+lxml==4.9.3
+
+# Data Visualization (optional)
+matplotlib==3.7.1
+
+# Environment Variables
+python-dotenv==1.0.1
+
+# HTTP Handling
+urllib3==1.26.18
+
+# JSON and YAML Support
+PyYAML==6.0.2
+
+# Logging & Utils
+loguru==0.7.2
+
+# Compatibility Flags
+setuptools==68.0.0
+wheel==0.41.2
+
+# Force use of binary wheels only (prevent build from source)
+--only-binary :all:
