@@ -1,42 +1,20 @@
-# ==========================================
-# Smart On-chain Technical Narrative Scanner
-# Stable Render Build (Python 3.11)
-# ==========================================
 
-# Core Libraries
+# Smart On-chain Technical Narrative Scanner - stable for Render (Python 3.11)
 requests==2.32.3
 pandas==2.2.3
 numpy==1.26.4
-
-# Date & Time
 python-dateutil==2.9.0.post0
 tzdata==2025.2
-
-# Async & Task Scheduling
 aiohttp==3.9.5
 apscheduler==3.10.4
-
-# Telegram Bot Integration
 python-telegram-bot==21.3
-
-# APIs and Parsing
 beautifulsoup4==4.12.3
 lxml==4.9.3
-
-# Optional Visualization
 matplotlib==3.7.2
-
-# Environment Variables
 python-dotenv==1.0.1
-
-# JSON & YAML
 ujson==5.10.0
 PyYAML==6.0.2
-
-# Logging & Utils
 loguru==0.7.2
-
-# Compatibility
 certifi>=2024.7.4
 charset-normalizer>=3.3.2
 urllib3>=2.2.2
