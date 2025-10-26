@@ -6,7 +6,7 @@
 # Core Dependencies
 requests==2.31.0
 pandas>=2.2.3
-numpy==1.23.5
+numpy>=1.26.0
 
 # Async & Task Scheduling
 aiohttp==3.9.5
