@@ -1,4 +1,23 @@
-pandas
-requests
-numpy
-python-dateutil
+# === Core Libraries ===
+requests==2.32.3
+pandas==2.2.2
+numpy==1.26.4
+
+# === Date & Time ===
+python-dateutil==2.9.0.post0
+
+# === Machine Learning / Transformers (optional) ===
+transformers==4.44.2
+torch==2.3.1
+
+# === Telegram & APIs ===
+python-telegram-bot==21.3
+
+# === Data Handling / JSON ===
+ujson==5.10.0
+
+# === Compatibility (for Render / Termux) ===
+certifi>=2024.2.2
+charset-normalizer>=3.3.2
+urllib3>=2.2.1
+idna>=3.7
