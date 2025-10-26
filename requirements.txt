@@ -1,42 +1,45 @@
-# ===========================
-# Smart On-chain Technical Narrative - Stable Build for Render
-# Optimized for Python 3.10 (Lightweight + Fast Deploy)
-# ===========================
+# ==========================================
+# Smart On-chain Technical Narrative Scanner
+# Stable Render Build (Python 3.11)
+# ==========================================
 
-# Core Dependencies
-requests==2.31.0
-pandas==1.5.3
-numpy==1.23.5
+# Core Libraries
+requests==2.32.3
+pandas==2.2.3
+numpy==1.26.4
+
+# Date & Time
+python-dateutil==2.9.0.post0
+tzdata==2025.2
 
 # Async & Task Scheduling
 aiohttp==3.9.5
 apscheduler==3.10.4
 
 # Telegram Bot Integration
-python-telegram-bot==20.3
+python-telegram-bot==21.3
 
 # APIs and Parsing
 beautifulsoup4==4.12.3
 lxml==4.9.3
 
-# Data Visualization (optional)
-matplotlib==3.7.1
+# Optional Visualization
+matplotlib==3.7.2
 
 # Environment Variables
 python-dotenv==1.0.1
 
-# HTTP Handling
-urllib3==1.26.18
-
-# JSON and YAML Support
+# JSON & YAML
+ujson==5.10.0
 PyYAML==6.0.2
 
 # Logging & Utils
 loguru==0.7.2
 
-# Compatibility Flags
-setuptools==68.0.0
-wheel==0.41.2
-
-# Force use of binary wheels only (prevent build from source)
---only-binary :all:
+# Compatibility
+certifi>=2024.7.4
+charset-normalizer>=3.3.2
+urllib3>=2.2.2
+idna>=3.7
+setuptools>=68.0.0
+wheel>=0.41.2
