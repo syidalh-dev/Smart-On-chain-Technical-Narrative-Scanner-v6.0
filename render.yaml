@@ -2,9 +2,8 @@ services:
   - type: worker
     name: smart-ai-scanner
     env: python
-    pythonVersion: 3.11.9
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
-    schedule: "*/30 * * * *"  # تشغيل المؤشر كل 30 دقيقة
-Convert service to worker + schedule every 30m
+    pythonVersion: 3.11.9
+    autoDeploy: true
