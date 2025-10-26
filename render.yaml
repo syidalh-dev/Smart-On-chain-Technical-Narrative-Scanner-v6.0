@@ -7,3 +7,4 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
     schedule: "*/30 * * * *"  # تشغيل المؤشر كل 30 دقيقة
+Convert service to worker + schedule every 30m
