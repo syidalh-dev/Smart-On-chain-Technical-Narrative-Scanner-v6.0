@@ -1,0 +1,21 @@
+# ==========================================
+# Render Deployment Config - Smart AI Scanner
+# ==========================================
+
+services:
+  - type: web
+    name: smart-ai-scanner
+    env: python
+    plan: free
+    region: frankfurt  # يمكنك تغييره لاحقًا
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    pythonVersion: 3.11.9
+    autoDeploy: true
+    envVars:
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: CMC_API_KEY
+        sync: false
+      - key: HF_API_KEY
+        sync: false
