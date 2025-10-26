@@ -1,23 +1,17 @@
-# === Core Libraries ===
-requests==2.32.3
+--only-binary=:all:
+pip>=25.1.0
+setuptools>=68.0.0
+wheel>=0.43.0
+
+# الأساسيات
 pandas==2.2.2
 numpy==1.26.4
+requests==2.31.0
 
-# === Date & Time ===
-python-dateutil==2.9.0.post0
+# التحليل الفني
+ta==0.10.2
+matplotlib==3.8.4
 
-# === Machine Learning / Transformers (optional) ===
-transformers==4.44.2
-torch==2.3.1
-
-# === Telegram & APIs ===
-python-telegram-bot==21.3
-
-# === Data Handling / JSON ===
-ujson==5.10.0
-
-# === Compatibility (for Render / Termux) ===
-certifi>=2024.2.2
-charset-normalizer>=3.3.2
-urllib3>=2.2.1
-idna>=3.7
+# الواجهة والنشر
+flask==3.0.3
+gunicorn==21.2.0
