@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Smart On-chain + Technical + Narrative Scanner v6.0
+Smart On-chain + Technical + Narrative Scanner v6.0 (Render-ready)
 Primary: CoinMarketCap (CMC) -> Fallback: CoinGecko
 Technical: RSI, EMA20/EMA50, MACD
 Sources: CMC, CoinGecko, Binance (klines), DexScreener, DeFiLlama
 Notifier: Telegram (instant send)
-Designed for Render (memory-friendly; HF model optional via ENABLE_HF)
+Designed for Render (persistent mode + memory-friendly)
 """
 
 import os
@@ -34,6 +34,9 @@ ENABLE_HF = os.getenv("ENABLE_HF", "false").lower() in ("1","true","yes")
 MAX_MARKET_CAP = float(os.getenv("MAX_MARKET_CAP", str(50_000_000)))  # focus <= $50M by default
 MIN_VOLUME_USD = float(os.getenv("MIN_VOLUME_USD", "2000"))
 TOP_K = int(os.getenv("TOP_K", "8"))
+
+# Scan interval (seconds)
+SCAN_INTERVAL = int(os.getenv("SCAN_INTERVAL", "1800"))  # default: every 30 min
 
 # Narrative keywords
 NARRATIVE_KEYWORDS = {
@@ -68,7 +71,7 @@ def safe_get(dct, *keys, default=None):
     return v
 
 # -------------------------
-# Technical helpers (lightweight)
+# Technical helpers
 # -------------------------
 def ema(series, period):
     return series.ewm(span=period, adjust=False).mean()
@@ -135,11 +138,9 @@ def fetch_defillama_protocols():
     return pd.DataFrame(j)
 
 def fetch_binance_klines(symbol, interval="1h", limit=200):
-    # symbol: e.g., BTCUSDT or FETUSDT etc.
     url = "https://api.binance.com/api/v3/klines"
     params = {"symbol": symbol, "interval": interval, "limit": limit}
     j = http_get(url, params=params)
-    # returns list of klines -> convert to DataFrame
     if not j or not isinstance(j, list):
         return None
     cols = ["open_time","open","high","low","close","volume","close_time","qav","num_trades","tbqav","tqav","ignore"]
@@ -149,7 +150,7 @@ def fetch_binance_klines(symbol, interval="1h", limit=200):
     return df
 
 # -------------------------
-# Narrative scoring (keywords)
+# Narrative scoring
 # -------------------------
 def keyword_narrative_score(name, description=""):
     txt = f"{name} {description}".lower()
@@ -163,42 +164,35 @@ def keyword_narrative_score(name, description=""):
     return min(1.0, score / maxc)
 
 # -------------------------
-# Core analysis (CMC primary, CG fallback)
+# Core analysis
 # -------------------------
 def load_market_list():
-    # Try CMC first
     cmc = fetch_cmc_listings(limit=300)
     if not cmc.empty:
-        # Normalize columns for usage
         df = cmc
         df["symbol"] = df["symbol"].astype(str).str.upper()
-        df["name"] = df["name"]
         df["price"] = df["quote"].apply(lambda q: safe_get(q,"USD","price", default=0) if isinstance(q,dict) else 0)
         df["market_cap"] = df["quote"].apply(lambda q: safe_get(q,"USD","market_cap", default=0) if isinstance(q,dict) else 0)
         df["volume_24h"] = df["quote"].apply(lambda q: safe_get(q,"USD","volume_24h", default=0) if isinstance(q,dict) else 0)
         return df
-    # Fallback to CoinGecko
     cg = fetch_coingecko_markets(per_page=250, page=1)
     if cg.empty:
         return pd.DataFrame()
     cg["symbol"] = cg["symbol"].astype(str).str.upper()
-    cg["name"] = cg["name"]
     cg["price"] = cg["current_price"]
     cg["market_cap"] = cg["market_cap"]
     cg["volume_24h"] = cg["total_volume"]
     return cg
 
 def analyze_and_score(top_k=TOP_K):
-    # Fetch sources
     markets = load_market_list()
     if markets.empty:
         print(now_ts(), "⚠️ no market data from CMC/CG")
         return []
     dex = fetch_dexscreener_pairs()
     llama = fetch_defillama_protocols()
-
     results = []
-    # iterate market list (light: iterate top 300 or so)
+
     for _, row in markets.iterrows():
         try:
             symbol = str(row.get("symbol","")).upper()
@@ -206,31 +200,13 @@ def analyze_and_score(top_k=TOP_K):
             price = float(row.get("price") or 0)
             market_cap = float(row.get("market_cap") or 0)
             vol24 = float(row.get("volume_24h") or 0)
+            if market_cap <= 0 or market_cap > MAX_MARKET_CAP: continue
+            if vol24 < MIN_VOLUME_USD: continue
 
-            # initial filters
-            if market_cap <= 0 or market_cap > MAX_MARKET_CAP:
-                continue
-            if vol24 < MIN_VOLUME_USD:
-                continue
-
-            # narrative
-            desc = ""
-            # try to pull short description from CG if available
-            # (non-blocking)
-            if COINGECKO_API_KEY or True:
-                cg_id = None
-                # if markets came from CMC try to map via slug, else skip
-                cg_detail = None
-                # We will not block on description to save time
-
-            narrative_score = keyword_narrative_score(name, desc)
-
-            # DexScreener liquidity/vol heuristics
-            dex_liq = 0.0
-            dex_vol24 = 0.0
+            narrative_score = keyword_narrative_score(name, "")
+            dex_liq = dex_vol24 = 0.0
             try:
                 if not dex.empty:
-                    # try to find rows where baseToken.symbol==symbol or pairName contains symbol
                     mask = dex.apply(lambda x: isinstance(x.get("baseToken"), dict) and x.get("baseToken").get("symbol","").upper()==symbol, axis=1)
                     matched = dex[mask]
                     if matched.empty:
@@ -239,92 +215,52 @@ def analyze_and_score(top_k=TOP_K):
                     if not matched.empty:
                         dex_liq = matched.apply(lambda x: safe_get(x,"liquidity","usd", default=0), axis=1).max()
                         dex_vol24 = matched.apply(lambda x: safe_get(x,"volume","h24", default=0), axis=1).max()
-            except Exception:
-                pass
+            except Exception: pass
 
-            # DeFiLlama presence
             onchain_presence = False
             try:
                 if not llama.empty and "symbol" in llama.columns:
                     onchain_presence = any(llama["symbol"].dropna().astype(str).str.upper() == symbol)
-            except Exception:
-                onchain_presence = False
+            except Exception: pass
 
-            # Binance technicals: try symbolUSDT pairs (most tokens use USDT)
             bin_sym = f"{symbol}USDT"
             kdf = fetch_binance_klines(bin_sym, interval="1h", limit=120)
-            rsi_val = 50.0
-            ema20_over_50 = False
-            macd_hit = False
-            vol_spike = False
-            bin_vol = 0.0
+            rsi_val, ema20_over_50, macd_hit, vol_spike, bin_vol = 50.0, False, False, False, 0.0
             if kdf is not None and not kdf.empty:
                 ser = kdf["close"].astype(float)
                 if len(ser) >= 20:
-                    rsi_series = compute_rsi(ser, period=14)
-                    rsi_val = float(rsi_series.iloc[-1])
+                    rsi_val = float(compute_rsi(ser, 14).iloc[-1])
                     ema20 = ema(ser, 20).iloc[-1]
                     ema50 = ema(ser, 50).iloc[-1] if len(ser)>=50 else ema(ser, 50).iloc[-1]
                     ema20_over_50 = ema20 > ema50
                     macd_line, macd_signal, macd_hist = compute_macd(ser)
-                    macd_hit = (macd_hist.iloc[-1] > 0 and macd_hist.iloc[-2] <= 0)  # recent MACD histogram cross up
-                # volume
+                    macd_hit = (macd_hist.iloc[-1] > 0 and macd_hist.iloc[-2] <= 0)
                 bin_vol = float(kdf["volume"].astype(float).sum())
-                # simple volume spike: compare last bar volume to average of last 24 bars
                 try:
                     last_vol = float(kdf["volume"].astype(float).iloc[-1])
                     avg_vol = float(kdf["volume"].astype(float).tail(24).mean() or 1)
-                    if last_vol / max(1, avg_vol) > 3.0:
-                        vol_spike = True
-                except Exception:
-                    vol_spike = False
+                    if last_vol / max(1, avg_vol) > 3.0: vol_spike = True
+                except Exception: vol_spike = False
 
-            # Compose components
-            tech_comp = 0.0
-            tech_comp += 0.5 * (1.0 if ema20_over_50 else 0.0)
-            tech_comp += 0.3 * (1.0 if rsi_val > 55 else (0.5 if rsi_val>45 else 0.0))
-            tech_comp += 0.2 * (1.0 if macd_hit else 0.0)
+            tech_comp = 0.5*(1 if ema20_over_50 else 0) + 0.3*(1 if rsi_val>55 else (0.5 if rsi_val>45 else 0)) + 0.2*(1 if macd_hit else 0)
+            social_comp = narrative_score
+            onchain_comp = 0.6*(1 if dex_liq>100_000 else 0) + 0.4*(1 if onchain_presence else 0)
+            vol_comp = 0.6*(1 if vol_spike else 0) + 0.4*min(1.0, bin_vol / max(1.0, vol24))
+            total_score = max(0, min(1.0, 0.35*tech_comp + 0.3*social_comp + 0.25*onchain_comp + 0.1*vol_comp))
 
-            social_comp = narrative_score  # 0..1 normalized
-
-            onchain_comp = 0.0
-            onchain_comp += 0.6 * (1.0 if dex_liq > 100_000 else 0.0)
-            onchain_comp += 0.4 * (1.0 if onchain_presence else 0.0)
-
-            vol_comp = 0.6 * (1.0 if vol_spike else 0.0) + 0.4 * min(1.0, bin_vol / max(1.0, vol24))
-
-            # final weighted score
-            total_score = (0.35 * tech_comp) + (0.30 * social_comp) + (0.25 * onchain_comp) + (0.10 * vol_comp)
-            total_score = max(0.0, min(1.0, total_score))
-
-            # threshold for rare opportunity (tuneable); default 0.80
             if total_score >= 0.80:
                 results.append({
-                    "symbol": symbol,
-                    "name": name,
-                    "price": price,
-                    "market_cap": market_cap,
-                    "total_volume": vol24,
-                    "dex_liquidity": int(dex_liq or 0),
-                    "dex_volume_24h": int(dex_vol24 or 0),
-                    "binance_volume": int(bin_vol or 0),
-                    "rsi": float(rsi_val),
-                    "ema20_over_50": bool(ema20_over_50),
-                    "macd_hit": bool(macd_hit),
-                    "vol_spike": bool(vol_spike),
-                    "narrative_score": float(narrative_score),
-                    "onchain_presence": bool(onchain_presence),
-                    "total_score": float(total_score),
-                    "timestamp": now_ts()
+                    "symbol": symbol, "name": name, "price": price, "market_cap": market_cap,
+                    "total_volume": vol24, "dex_liquidity": int(dex_liq or 0),
+                    "dex_volume_24h": int(dex_vol24 or 0), "binance_volume": int(bin_vol or 0),
+                    "rsi": float(rsi_val), "ema20_over_50": bool(ema20_over_50),
+                    "macd_hit": bool(macd_hit), "vol_spike": bool(vol_spike),
+                    "narrative_score": float(narrative_score), "onchain_presence": bool(onchain_presence),
+                    "total_score": float(total_score), "timestamp": now_ts()
                 })
         except Exception:
             continue
-
-    # sort top scored
-    if not results:
-        return []
-    results = sorted(results, key=lambda x: x["total_score"], reverse=True)[:top_k]
-    return results
+    return sorted(results, key=lambda x: x["total_score"], reverse=True)[:top_k] if results else []
 
 # -------------------------
 # Telegram notifier
@@ -357,15 +293,24 @@ def build_message(signals):
     msg += "_Note: Signals combine technical + on-chain + narrative layers._"
     return msg
 
-# Public scan function
 def scan_once():
-    signals = analyze_and_score(top_k=TOP_K)
-    return signals
+    return analyze_and_score(top_k=TOP_K)
 
-# If run directly for debug
+# -------------------------
+# Continuous Run Loop (Render-ready)
+# -------------------------
 if __name__ == "__main__":
-    s = scan_once()
-    if not s:
-        print(now_ts(), "📉 Smart AI v6.0 — no rare signals now.")
-    else:
-        print(json.dumps(s, indent=2))
+    print(now_ts(), "🚀 Smart AI v6.0 — Continuous scanning started")
+    while True:
+        try:
+            signals = scan_once()
+            if signals:
+                msg = build_message(signals)
+                send_telegram_message(msg)
+                print(now_ts(), f"✅ Sent {len(signals)} signals to Telegram.")
+            else:
+                print(now_ts(), "📉 No rare opportunities found.")
+        except Exception as e:
+            print(now_ts(), "⚠️ Exception in main loop:", e)
+        print(now_ts(), f"⏳ Sleeping for {SCAN_INTERVAL/60:.1f} minutes...\n")
+        time.sleep(SCAN_INTERVAL)
