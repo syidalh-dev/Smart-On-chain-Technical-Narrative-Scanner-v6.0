@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Smart On-chain + Technical + Narrative Scanner v6.0 (Render-ready)
-Primary: CoinMarketCap (CMC) -> Fallback: CoinGecko
-Technical: RSI, EMA20/EMA50, MACD
-Sources: CMC, CoinGecko, Binance (klines), DexScreener, DeFiLlama
-Notifier: Telegram (instant send)
-Designed for Render (persistent mode + memory-friendly)
+Smart On-chain + Technical + Narrative Scanner v6.2
+Optimized for Render Worker Runtime
+Enhancements:
+- Fixed UTC-safe datetime (no deprecation warnings)
+- Added result persistence (signals_history.json)
+- Compatible with Python 3.11–3.13
+- Fully worker-friendly (no port binding)
 """
 
 import os
@@ -15,7 +16,7 @@ import json
 import requests
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, UTC, timedelta
 
 # -------------------------
 # Config / Env
@@ -28,29 +29,28 @@ COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY", "")
 BINANCE_API_KEY = os.getenv("BINANCE_API_KEY", "")
 BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY", "")
 
-ENABLE_HF = os.getenv("ENABLE_HF", "false").lower() in ("1","true","yes")
+ENABLE_HF = os.getenv("ENABLE_HF", "false").lower() in ("1", "true", "yes")
 
 # Tunables
-MAX_MARKET_CAP = float(os.getenv("MAX_MARKET_CAP", str(50_000_000)))  # focus <= $50M by default
+MAX_MARKET_CAP = float(os.getenv("MAX_MARKET_CAP", str(50_000_000)))  # <= $50M
 MIN_VOLUME_USD = float(os.getenv("MIN_VOLUME_USD", "2000"))
 TOP_K = int(os.getenv("TOP_K", "8"))
-
-# Scan interval (seconds)
-SCAN_INTERVAL = int(os.getenv("SCAN_INTERVAL", "1800"))  # default: every 30 min
+SLEEP_MINUTES = float(os.getenv("SLEEP_MINUTES", "30.0"))
 
 # Narrative keywords
 NARRATIVE_KEYWORDS = {
-    "AI": ["ai","artificial intelligence","machine learning","llm","genai"],
-    "DeFi": ["defi","liquidity","yield","staking","lending","dex"],
-    "Gaming": ["game","gaming","gamefi","metaverse"],
-    "RWA": ["real-world","real world","rwa"]
+    "AI": ["ai", "artificial intelligence", "machine learning", "llm", "genai"],
+    "DeFi": ["defi", "liquidity", "yield", "staking", "lending", "dex"],
+    "Gaming": ["game", "gaming", "gamefi", "metaverse"],
+    "RWA": ["real-world", "real world", "rwa"]
 }
 
 # -------------------------
 # Utilities
 # -------------------------
 def now_ts():
-    return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    """Return current UTC timestamp (safe for Python 3.12+)"""
+    return datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 def http_get(url, params=None, headers=None, timeout=15):
     try:
@@ -102,7 +102,7 @@ def fetch_cmc_listings(limit=200):
         return pd.DataFrame()
     url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest"
     headers = {"X-CMC_PRO_API_KEY": CMC_API_KEY}
-    params = {"limit": limit, "convert":"USD"}
+    params = {"limit": limit, "convert": "USD"}
     j = http_get(url, params=params, headers=headers)
     if not j:
         return pd.DataFrame()
@@ -113,7 +113,8 @@ def fetch_coingecko_markets(per_page=250, page=1):
     headers = {}
     if COINGECKO_API_KEY:
         headers["x-cg-pro-api-key"] = COINGECKO_API_KEY
-    params = {"vs_currency":"usd","order":"market_cap_asc","per_page":per_page,"page":page,"sparkline":"false"}
+    params = {"vs_currency": "usd", "order": "market_cap_asc",
+              "per_page": per_page, "page": page, "sparkline": "false"}
     j = http_get(url, params=params, headers=headers)
     if not j:
         return pd.DataFrame()
@@ -143,7 +144,8 @@ def fetch_binance_klines(symbol, interval="1h", limit=200):
     j = http_get(url, params=params)
     if not j or not isinstance(j, list):
         return None
-    cols = ["open_time","open","high","low","close","volume","close_time","qav","num_trades","tbqav","tqav","ignore"]
+    cols = ["open_time","open","high","low","close","volume",
+            "close_time","qav","num_trades","tbqav","tqav","ignore"]
     df = pd.DataFrame(j, columns=cols)
     df["close"] = pd.to_numeric(df["close"], errors="coerce")
     df["volume"] = pd.to_numeric(df["volume"], errors="coerce")
@@ -171,14 +173,16 @@ def load_market_list():
     if not cmc.empty:
         df = cmc
         df["symbol"] = df["symbol"].astype(str).str.upper()
-        df["price"] = df["quote"].apply(lambda q: safe_get(q,"USD","price", default=0) if isinstance(q,dict) else 0)
-        df["market_cap"] = df["quote"].apply(lambda q: safe_get(q,"USD","market_cap", default=0) if isinstance(q,dict) else 0)
-        df["volume_24h"] = df["quote"].apply(lambda q: safe_get(q,"USD","volume_24h", default=0) if isinstance(q,dict) else 0)
+        df["name"] = df["name"]
+        df["price"] = df["quote"].apply(lambda q: safe_get(q, "USD", "price", default=0) if isinstance(q, dict) else 0)
+        df["market_cap"] = df["quote"].apply(lambda q: safe_get(q, "USD", "market_cap", default=0) if isinstance(q, dict) else 0)
+        df["volume_24h"] = df["quote"].apply(lambda q: safe_get(q, "USD", "volume_24h", default=0) if isinstance(q, dict) else 0)
         return df
     cg = fetch_coingecko_markets(per_page=250, page=1)
     if cg.empty:
         return pd.DataFrame()
     cg["symbol"] = cg["symbol"].astype(str).str.upper()
+    cg["name"] = cg["name"]
     cg["price"] = cg["current_price"]
     cg["market_cap"] = cg["market_cap"]
     cg["volume_24h"] = cg["total_volume"]
@@ -191,76 +195,87 @@ def analyze_and_score(top_k=TOP_K):
         return []
     dex = fetch_dexscreener_pairs()
     llama = fetch_defillama_protocols()
-    results = []
 
+    results = []
     for _, row in markets.iterrows():
         try:
-            symbol = str(row.get("symbol","")).upper()
-            name = row.get("name","")
+            symbol = str(row.get("symbol", "")).upper()
+            name = row.get("name", "")
             price = float(row.get("price") or 0)
             market_cap = float(row.get("market_cap") or 0)
             vol24 = float(row.get("volume_24h") or 0)
-            if market_cap <= 0 or market_cap > MAX_MARKET_CAP: continue
-            if vol24 < MIN_VOLUME_USD: continue
 
-            narrative_score = keyword_narrative_score(name, "")
-            dex_liq = dex_vol24 = 0.0
-            try:
-                if not dex.empty:
-                    mask = dex.apply(lambda x: isinstance(x.get("baseToken"), dict) and x.get("baseToken").get("symbol","").upper()==symbol, axis=1)
-                    matched = dex[mask]
-                    if matched.empty:
-                        mask2 = dex.apply(lambda x: isinstance(x.get("pairName"), str) and symbol in x.get("pairName","").upper(), axis=1)
-                        matched = dex[mask2]
-                    if not matched.empty:
-                        dex_liq = matched.apply(lambda x: safe_get(x,"liquidity","usd", default=0), axis=1).max()
-                        dex_vol24 = matched.apply(lambda x: safe_get(x,"volume","h24", default=0), axis=1).max()
-            except Exception: pass
+            if market_cap <= 0 or market_cap > MAX_MARKET_CAP:
+                continue
+            if vol24 < MIN_VOLUME_USD:
+                continue
+
+            desc = ""
+            narrative_score = keyword_narrative_score(name, desc)
+
+            dex_liq, dex_vol24 = 0.0, 0.0
+            if not dex.empty:
+                mask = dex.apply(lambda x: isinstance(x.get("baseToken"), dict)
+                                 and x.get("baseToken").get("symbol", "").upper() == symbol, axis=1)
+                matched = dex[mask]
+                if matched.empty:
+                    mask2 = dex.apply(lambda x: isinstance(x.get("pairName"), str)
+                                      and symbol in x.get("pairName", "").upper(), axis=1)
+                    matched = dex[mask2]
+                if not matched.empty:
+                    dex_liq = matched.apply(lambda x: safe_get(x, "liquidity", "usd", default=0), axis=1).max()
+                    dex_vol24 = matched.apply(lambda x: safe_get(x, "volume", "h24", default=0), axis=1).max()
 
             onchain_presence = False
-            try:
-                if not llama.empty and "symbol" in llama.columns:
-                    onchain_presence = any(llama["symbol"].dropna().astype(str).str.upper() == symbol)
-            except Exception: pass
+            if not llama.empty and "symbol" in llama.columns:
+                onchain_presence = any(llama["symbol"].dropna().astype(str).str.upper() == symbol)
 
             bin_sym = f"{symbol}USDT"
             kdf = fetch_binance_klines(bin_sym, interval="1h", limit=120)
-            rsi_val, ema20_over_50, macd_hit, vol_spike, bin_vol = 50.0, False, False, False, 0.0
+            rsi_val, ema20_over_50, macd_hit, vol_spike = 50.0, False, False, False
+            bin_vol = 0.0
+
             if kdf is not None and not kdf.empty:
                 ser = kdf["close"].astype(float)
                 if len(ser) >= 20:
-                    rsi_val = float(compute_rsi(ser, 14).iloc[-1])
+                    rsi_val = float(compute_rsi(ser, period=14).iloc[-1])
                     ema20 = ema(ser, 20).iloc[-1]
-                    ema50 = ema(ser, 50).iloc[-1] if len(ser)>=50 else ema(ser, 50).iloc[-1]
+                    ema50 = ema(ser, 50).iloc[-1] if len(ser) >= 50 else ema(ser, 50).iloc[-1]
                     ema20_over_50 = ema20 > ema50
                     macd_line, macd_signal, macd_hist = compute_macd(ser)
                     macd_hit = (macd_hist.iloc[-1] > 0 and macd_hist.iloc[-2] <= 0)
                 bin_vol = float(kdf["volume"].astype(float).sum())
-                try:
-                    last_vol = float(kdf["volume"].astype(float).iloc[-1])
-                    avg_vol = float(kdf["volume"].astype(float).tail(24).mean() or 1)
-                    if last_vol / max(1, avg_vol) > 3.0: vol_spike = True
-                except Exception: vol_spike = False
+                last_vol = float(kdf["volume"].astype(float).iloc[-1])
+                avg_vol = float(kdf["volume"].astype(float).tail(24).mean() or 1)
+                if last_vol / max(1, avg_vol) > 3.0:
+                    vol_spike = True
 
-            tech_comp = 0.5*(1 if ema20_over_50 else 0) + 0.3*(1 if rsi_val>55 else (0.5 if rsi_val>45 else 0)) + 0.2*(1 if macd_hit else 0)
+            tech_comp = 0.5 * (1.0 if ema20_over_50 else 0.0)
+            tech_comp += 0.3 * (1.0 if rsi_val > 55 else (0.5 if rsi_val > 45 else 0.0))
+            tech_comp += 0.2 * (1.0 if macd_hit else 0.0)
+
+            onchain_comp = 0.6 * (1.0 if dex_liq > 100_000 else 0.0) + 0.4 * (1.0 if onchain_presence else 0.0)
+            vol_comp = 0.6 * (1.0 if vol_spike else 0.0) + 0.4 * min(1.0, bin_vol / max(1.0, vol24))
             social_comp = narrative_score
-            onchain_comp = 0.6*(1 if dex_liq>100_000 else 0) + 0.4*(1 if onchain_presence else 0)
-            vol_comp = 0.6*(1 if vol_spike else 0) + 0.4*min(1.0, bin_vol / max(1.0, vol24))
-            total_score = max(0, min(1.0, 0.35*tech_comp + 0.3*social_comp + 0.25*onchain_comp + 0.1*vol_comp))
+
+            total_score = 0.35 * tech_comp + 0.30 * social_comp + 0.25 * onchain_comp + 0.10 * vol_comp
+            total_score = max(0.0, min(1.0, total_score))
 
             if total_score >= 0.80:
                 results.append({
-                    "symbol": symbol, "name": name, "price": price, "market_cap": market_cap,
-                    "total_volume": vol24, "dex_liquidity": int(dex_liq or 0),
-                    "dex_volume_24h": int(dex_vol24 or 0), "binance_volume": int(bin_vol or 0),
-                    "rsi": float(rsi_val), "ema20_over_50": bool(ema20_over_50),
-                    "macd_hit": bool(macd_hit), "vol_spike": bool(vol_spike),
-                    "narrative_score": float(narrative_score), "onchain_presence": bool(onchain_presence),
-                    "total_score": float(total_score), "timestamp": now_ts()
+                    "symbol": symbol,
+                    "name": name,
+                    "price": price,
+                    "market_cap": market_cap,
+                    "total_score": float(total_score),
+                    "timestamp": now_ts()
                 })
         except Exception:
             continue
-    return sorted(results, key=lambda x: x["total_score"], reverse=True)[:top_k] if results else []
+
+    if not results:
+        return []
+    return sorted(results, key=lambda x: x["total_score"], reverse=True)[:top_k]
 
 # -------------------------
 # Telegram notifier
@@ -270,89 +285,61 @@ def send_telegram_message(text):
         print(now_ts(), "⚠️ Telegram credentials missing")
         return False
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode":"Markdown"}
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "Markdown"}
     try:
         r = requests.post(url, json=payload, timeout=12)
-        if r.status_code == 200:
-            return True
-        else:
-            print(now_ts(), "⚠️ Telegram error:", r.status_code, r.text)
-            return False
+        return r.status_code == 200
     except Exception as e:
         print(now_ts(), "⚠️ Telegram exception:", e)
         return False
 
 def build_message(signals):
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-    msg = f"*🚀 Smart AI v6.0 — Rare Opportunities Detected*\n🕒 {now}\n\n"
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    msg = f"*🚀 Smart AI v6.2 — Rare Opportunities Detected*\n🕒 {now}\n\n"
     for s in signals:
-        msg += (f"*{s['symbol']}* — `${s['price']:.6f}` | *Score:* {int(s['total_score']*100)}%\n"
-                f"RSI: {s['rsi']:.1f} | EMA20>50: {s['ema20_over_50']} | MACD up: {s['macd_hit']}\n"
-                f"DexLiq: ${s['dex_liquidity']:,} | DexVol24: ${s['dex_volume_24h']:,} | BinVol: ${s['binance_volume']:,}\n"
-                f"Narrative: {s['narrative_score']:.2f} | OnChain: {s['onchain_presence']}\n\n")
+        msg += (f"*{s['symbol']}* — `${s['price']:.6f}` | *Score:* {int(s['total_score']*100)}%\n")
     msg += "_Note: Signals combine technical + on-chain + narrative layers._"
     return msg
 
-def scan_once():
-    return analyze_and_score(top_k=TOP_K)
+# -----------------------------
+# Data saving (non-intrusive)
+# -----------------------------
+def save_results_to_file(results):
+    """Append signals to local JSON file safely (no effect on analysis)."""
+    if not results:
+        return
+    filename = os.path.join(os.path.dirname(__file__), "signals_history.json")
+    try:
+        try:
+            with open(filename, "r", encoding="utf-8") as f:
+                old = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            old = []
+        for r in results:
+            r.setdefault("saved_at", datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"))
+            old.append(r)
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(old, f, indent=2, ensure_ascii=False)
+        print(now_ts(), f"💾 Saved {len(results)} signals to signals_history.json")
+    except Exception as e:
+        print(now_ts(), "⚠️ Error while saving results:", e)
 
 # -------------------------
-# Continuous Run Loop (Render-ready)
+# Continuous loop (worker)
 # -------------------------
 if __name__ == "__main__":
-    print(now_ts(), "🚀 Smart AI v6.0 — Continuous scanning started")
+    print(now_ts(), "🚀 Smart AI v6.2 — بدأ المسح المستمر")
     while True:
-        try:
-            signals = scan_once()
-            if signals:
-                msg = build_message(signals)
-                send_telegram_message(msg)
-                print(now_ts(), f"✅ Sent {len(signals)} signals to Telegram.")
-            else:
-                print(now_ts(), "📉 No rare opportunities found.")
-        except Exception as e:
-            print(now_ts(), "⚠️ Exception in main loop:", e)
-        print(now_ts(), f"⏳ Sleeping for {SCAN_INTERVAL/60:.1f} minutes...\n")
-        time.sleep(SCAN_INTERVAL)
-# -----------------------------
-# 📦 Data Saving (Safe Add-on)
-# -----------------------------
-import json
-from datetime import datetime
-import os
-
-def save_results_to_file(results):
-    """
-    تحفظ نتائج التحليل في ملف JSON محلي دون التأثير على عمل السكربت.
-    """
-    if not results:
-        print("⚠️ لا توجد نتائج لحفظها.")
-        return
-
-    filename = "signals_history.json"
-    filepath = os.path.join(os.path.dirname(__file__), filename)
-
-    # قراءة البيانات القديمة إن وُجدت
-    try:
-        with open(filepath, "r") as f:
-            old_data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        old_data = []
-
-    # إضافة البيانات الجديدة مع الطابع الزمني
-    for r in results:
-        r["saved_at"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-        old_data.append(r)
-
-    # حفظ الملف
-    with open(filepath, "w") as f:
-        json.dump(old_data, f, indent=2)
-
-    print(f"✅ تم حفظ {len(results)} إشارة جديدة في {filename}")
-
-# 👇 ضع هذا السطر بعد عملية التحليل مباشرة
-# على سبيل المثال إذا كانت نتائجك تحفظ في متغير اسمه signals أو results
-try:
-    save_results_to_file(signals)
-except Exception as e:
-    print(f"⚠️ حدث خطأ أثناء حفظ النتائج: {e}")
+        signals = analyze_and_score(top_k=TOP_K)
+        if not signals:
+            print(now_ts(), "📉 لم يتم العثور على فرص نادرة.")
+        else:
+            print(now_ts(), f"✅ تم العثور على {len(signals)} فرص نادرة!")
+            msg = build_message(signals)
+            send_telegram_message(msg)
+            try:
+                save_results_to_file(signals)
+            except Exception as e:
+                print(now_ts(), "⚠️ save_results exception:", e)
+        print(now_ts(), f"⏳ النوم لمدة {SLEEP_MINUTES} دقيقة...")
+        time.sleep(SLEEP_MINUTES * 60)
