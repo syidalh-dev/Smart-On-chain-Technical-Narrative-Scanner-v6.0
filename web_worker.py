@@ -1,16 +1,23 @@
-from flask import Flask
+# web_worker.py
+import os
 import threading
-import main
+from flask import Flask, jsonify
+import main  # يفترض أن main.py في نفس المجلد ويحتوي start_worker_loop() + watched_tokens
 
 app = Flask(__name__)
 
-@app.route('/')
-def home():
-    return "✅ Smart AI Scanner is running (Render Free Plan Mode)."
+@app.route("/_healthz")
+def health():
+    try:
+        count = len(main.watched_tokens)
+    except Exception:
+        count = 0
+    return jsonify({"status":"ok","watch_count": count})
 
-# Start the scanner in a background thread
+# start the scanner loop in background
 threading.Thread(target=main.start_worker_loop, daemon=True).start()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
-  
+    port = int(os.environ.get("PORT", "10000"))
+    app.run(host="0.0.0.0", port=port)
+    
