@@ -344,6 +344,59 @@ def start_worker_loop():
             print(now_ts(), "⚠️ scanner exception:", e)
         print(now_ts(), f"⏳ النوم لمدة {SLEEP_MINUTES} دقيقة...")
         time.sleep(SLEEP_MINUTES * 60)
+        # -----------------------------
+# Watchlist & market-data persistence
+# -----------------------------
+MARKET_DATA_FILE = os.path.join(os.path.dirname(__file__), "market_data.json")
+
+# in-memory watchlist: symbol -> {"name":..., "history":[{...}], "meta":{...}}
+watched_tokens = {}
+
+def load_market_data():
+    try:
+        with open(MARKET_DATA_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            # restore to watched_tokens
+            for sym, v in data.items():
+                watched_tokens[sym] = v
+        print(now_ts(), f"💾 Loaded market data for {len(watched_tokens)} watched tokens")
+    except Exception:
+        # file missing / corrupt -> start fresh
+        print(now_ts(), "ℹ️ No existing market_data.json found (starting fresh)")
+
+def save_market_data():
+    try:
+        with open(MARKET_DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(watched_tokens, f, indent=2, ensure_ascii=False)
+        print(now_ts(), f"💾 Saved market data for {len(watched_tokens)} tokens")
+    except Exception as e:
+        print(now_ts(), "⚠️ Error saving market_data:", e)
+
+def add_to_watchlist(symbol, name, reason=None):
+    symbol = symbol.upper()
+    if symbol not in watched_tokens:
+        watched_tokens[symbol] = {
+            "name": name,
+            "added_at": now_ts(),
+            "reason": reason or "initial",
+            "history": []
+        }
+        print(now_ts(), f"🔔 Added {symbol} to watchlist ({reason})")
+        save_market_data()
+    else:
+        # update reason maybe
+        if reason:
+            watched_tokens[symbol].setdefault("reason_history", []).append({"at": now_ts(), "reason": reason})
+
+def record_token_snapshot(symbol, snapshot):
+    """Append latest market snapshot for watched token"""
+    symbol = symbol.upper()
+    if symbol not in watched_tokens:
+        return
+    watched_tokens[symbol]["history"].append(snapshot)
+    # keep history size reasonable
+    if len(watched_tokens[symbol]["history"]) > 500:
+        watched_tokens[symbol]["history"] = watched_tokens[symbol]["history"][-500:]
 # -------------------------
 # Continuous loop (worker)
 # -------------------------
