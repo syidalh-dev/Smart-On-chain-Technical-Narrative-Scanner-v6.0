@@ -323,7 +323,27 @@ def save_results_to_file(results):
         print(now_ts(), f"💾 Saved {len(results)} signals to signals_history.json")
     except Exception as e:
         print(now_ts(), "⚠️ Error while saving results:", e)
-
+# --- start_worker_loop helper (for web_worker integration) ---
+def start_worker_loop():
+    """Start the continuous scanner loop (callable from web_worker)."""
+    print(now_ts(), "🚀 Smart AI v6.2 — بدأ المسح المستمر (via start_worker_loop)")
+    while True:
+        try:
+            signals = analyze_and_score(top_k=TOP_K)
+            if not signals:
+                print(now_ts(), "📉 لم يتم العثور على فرص نادرة.")
+            else:
+                print(now_ts(), f"✅ تم العثور على {len(signals)} فرص نادرة!")
+                msg = build_message(signals)
+                send_telegram_message(msg)
+                try:
+                    save_results_to_file(signals)
+                except Exception as e:
+                    print(now_ts(), "⚠️ save_results exception:", e)
+        except Exception as e:
+            print(now_ts(), "⚠️ scanner exception:", e)
+        print(now_ts(), f"⏳ النوم لمدة {SLEEP_MINUTES} دقيقة...")
+        time.sleep(SLEEP_MINUTES * 60)
 # -------------------------
 # Continuous loop (worker)
 # -------------------------
