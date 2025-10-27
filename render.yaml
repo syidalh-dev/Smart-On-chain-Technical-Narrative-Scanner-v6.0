@@ -1,9 +1,8 @@
 services:
-  - type: worker
+  - type: web
     name: smart-ai-scanner
     env: python
-    pythonVersion: 3.11.9
     plan: free
-    buildCommand: pip install --upgrade pip wheel setuptools && pip install -r requirements.txt
-    startCommand: python main.py
-    autoDeploy: true
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn web_worker:app --bind 0.0.0.0:$PORT
+    pythonVersion: 3.11.9
