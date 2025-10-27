@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: smart-ai-scanner
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn web_worker:app --bind 0.0.0.0:$PORT
+    pythonVersion: 3.11.9
+    
