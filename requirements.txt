@@ -1,8 +1,0 @@
-Flask
-gunicorn
-requests
-pandas
-numpy
-tqdm
-python-dateutil
-lxml==4.9.3
