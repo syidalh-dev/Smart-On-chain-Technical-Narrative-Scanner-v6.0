@@ -256,6 +256,22 @@ def main_loop():
 
         print(now_ts(), f"⏳ Sleeping {SLEEP_MINUTES} minutes...")
         time.sleep(SLEEP_MINUTES * 60)
+        # اختبار إشعار تغيّر السوق
+if __name__ == "__main__":
+    fake_old = [
+        {"symbol": "TEST", "price": 1.0, "rsi": 45, "trend_up": False}
+    ]
+    fake_new = [
+        {"symbol": "TEST", "price": 1.10, "rsi": 60, "trend_up": True}
+    ]
+
+    changes = compare_with_old(fake_new, fake_old)
+    if changes:
+        msg = "*📈 Market Updates Detected (TEST MODE):*\n"
+        for c in changes:
+            msg += f"• *{c['symbol']}*: +{c['price_change']}% price, ΔRSI={c['rsi_change']}\n"
+        send_telegram_message(msg)
+        print("✅ تم إرسال إشعار تغيّر السوق التجريبي.")
 
 if __name__ == "__main__":
     main_loop()
