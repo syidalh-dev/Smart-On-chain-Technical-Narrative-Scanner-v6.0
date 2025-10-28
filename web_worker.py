@@ -2,6 +2,9 @@
 from flask import Flask, jsonify
 import threading
 import main  # يفترض أن main.py في نفس المجلد ويحتوي على main_loop()
+import time
+import os
+import requests
 
 app = Flask(__name__)
 
@@ -20,7 +23,7 @@ def health():
         count = len(main.load_json(main.WATCHLIST_FILE)) if hasattr(main, "WATCHLIST_FILE") else 0
     except Exception:
         count = 0
-    return jsonify({"status":"ok","watch_count": count})
+    return jsonify({"status": "ok", "watch_count": count})
 
 # تشغيل الكود الرئيسي في خيط الخلفية
 def background_worker():
@@ -29,9 +32,39 @@ def background_worker():
     except Exception as e:
         print("⚠️ background_worker error:", e)
 
+# 🧠 Smart Keep-Alive system
+def smart_keep_alive():
+    url = os.environ.get("RENDER_EXTERNAL_URL", "https://smart-on-chain-technical-narrative-7yj1.onrender.com")  # عدّل إذا تغير رابط تطبيقك
+    last_state = "idle"
+
+    while True:
+        try:
+            # نتحقق إن كان هناك نشاط أو إشارات نشطة في main
+            active = getattr(main, "active_signals", [])
+            if active and len(active) > 0:
+                if last_state != "busy":
+                    print("⚙️ نشاط مرتفع، إيقاف keep-alive مؤقتاً.")
+                    last_state = "busy"
+                # لا نرسل ping أثناء التحليل لتوفير الموارد
+                time.sleep(60)
+                continue
+            else:
+                if last_state != "idle":
+                    print("✅ لا يوجد نشاط، استئناف keep-alive الذكي.")
+                    last_state = "idle"
+
+            # إرسال ping كل 10 دقائق فقط إذا لا يوجد نشاط
+            requests.get(url + "/ping", timeout=10)
+            print("💓 Smart keep-alive ping sent.")
+            time.sleep(600)  # 10 دقائق
+        except Exception as e:
+            print("⚠️ Smart keep-alive error:", e)
+            time.sleep(300)  # إعادة المحاولة بعد 5 دقائق
+
+# تشغيل كل من العامل الرئيسي ونظام keep-alive في الخلفية
 threading.Thread(target=background_worker, daemon=True).start()
+threading.Thread(target=smart_keep_alive, daemon=True).start()
 
 if __name__ == "__main__":
-    port = int(__import__("os").environ.get("PORT", "10000"))
+    port = int(os.environ.get("PORT", "10000"))
     app.run(host="0.0.0.0", port=port)
-    
