@@ -1,5 +1,7 @@
+flask
+gunicorn
 requests
 pandas
 numpy
-flask
-gunicorn
+python-dateutil
+pytz
