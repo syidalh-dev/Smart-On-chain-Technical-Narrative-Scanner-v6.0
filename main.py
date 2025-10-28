@@ -276,6 +276,13 @@ def main_loop():
                     msg += f"• *{c['symbol']}*: +{c['price_change']}% price, ΔRSI={c['rsi_change']}\n"
                 send_telegram_message(msg)
                 print(now_ts(), f"🔔 {len(changes)} market changes sent.")
+                weekly_alerts = weekly_trend_analysis(signals_cache, new_data)
+if weekly_alerts:
+    msg = "*📊 Weekly Trend Alerts (7–14 days):*\n"
+    for c in weekly_alerts:
+        msg += f"• *{c['symbol']}*: +{c['price_change']}% ΔRSI={c['rsi_change']}\n"
+    send_telegram_message(msg)
+    print(now_ts(), f"📢 Sent {len(weekly_alerts)} medium-term alerts.")
 
             save_json(MARKET_FILE, new_data)
             save_json(SIGNALS_FILE, signals_cache + new_data)
