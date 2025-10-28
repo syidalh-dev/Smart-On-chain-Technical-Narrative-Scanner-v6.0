@@ -220,6 +220,36 @@ def compare_with_old(new_data, old_data):
         except Exception:
             continue
     return alerts
+    # ----------------------------- #
+# Medium-term Trend Tracker (7–14 days)
+# ----------------------------- #
+def weekly_trend_analysis(history, new_data):
+    alerts = []
+    now = datetime.now(UTC)
+    
+    # اجعل البيانات القديمة فقط آخر 14 يوم لتقليل الموارد
+    history = [h for h in history if (now - datetime.strptime(h["timestamp"], "%Y-%m-%d %H:%M:%S UTC")).days <= 14]
+    hist_map = {h["symbol"]: h for h in history}
+    
+    for coin in new_data:
+        sym = coin["symbol"]
+        old = hist_map.get(sym)
+        if not old:
+            continue
+        
+        price_change = (coin["price"] - old["price"]) / max(1e-8, old["price"]) * 100
+        rsi_change = coin["rsi"] - old["rsi"]
+        trend_up_now = coin["trend_up"] and not old["trend_up"]
+
+        # إشارات متوسطة المدى
+        if price_change >= 10 or (old["rsi"] < 55 and coin["rsi"] > 60) or trend_up_now:
+            alerts.append({
+                "symbol": sym,
+                "price_change": round(price_change, 2),
+                "rsi_change": round(rsi_change, 2),
+                "timestamp": now_ts()
+            })
+    return alerts
 
 # ----------------------------- #
 # Main Loop                     #
