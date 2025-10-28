@@ -412,3 +412,25 @@ def main_loop():
 
 if __name__ == "__main__":
     main_loop()
+import requests
+import os
+
+# 📩 دالة إرسال الرسائل إلى تليجرام (مطلوبة من web_worker)
+def send_telegram_message(message):
+    try:
+        token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+
+        if not token or not chat_id:
+            print("⚠️ لم يتم ضبط TELEGRAM_BOT_TOKEN أو TELEGRAM_CHAT_ID في الإعدادات البيئية.")
+            return
+
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        data = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
+        r = requests.post(url, data=data)
+        if r.status_code == 200:
+            print("📨 تم إرسال الرسالة إلى تليجرام بنجاح.")
+        else:
+            print("⚠️ فشل الإرسال إلى تليجرام:", r.text)
+    except Exception as e:
+        print("⚠️ خطأ أثناء إرسال رسالة تليجرام:", e)
