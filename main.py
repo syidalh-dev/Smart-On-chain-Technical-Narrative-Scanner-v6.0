@@ -149,6 +149,10 @@ def send_telegram_message(text):
         requests.post(url, json=payload, timeout=10)
     except Exception:
         pass
+        # اختبار إرسال رسالة يدوية إلى التلغرام
+if __name__ == "__main__":
+    send_telegram_message("✅ اختبار: Smart AI Scanner متصل الآن بنجاح 🚀")
+    print("تم إرسال رسالة اختبار إلى التلغرام ✅")
 
 # ----------------------------- #
 # Core Analyzer                 #
