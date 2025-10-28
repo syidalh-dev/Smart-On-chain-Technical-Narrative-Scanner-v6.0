@@ -396,7 +396,14 @@ def record_token_snapshot(symbol, snapshot):
     watched_tokens[symbol]["history"].append(snapshot)
     # keep history size reasonable
     if len(watched_tokens[symbol]["history"]) > 500:
-        watched_tokens[symbol]["history"] = watched_tokens[symbol]["history"][-500:]
+        
+         watched_tokens[symbol]["history"] = watched_tokens[symbol]["history"][-500:]
+                    # add to watchlist as candidate
+            try:
+                add_to_watchlist(symbol, name, reason="candidate_by_marketcap_vol")
+            except Exception:
+                pass
+                
 # -------------------------
 # Continuous loop (worker)
 # -------------------------
