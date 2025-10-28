@@ -60,6 +60,32 @@ def smart_keep_alive():
         except Exception as e:
             print("⚠️ Smart keep-alive error:", e)
             time.sleep(300)  # إعادة المحاولة بعد 5 دقائق
+            # 📨 إرسال رسالة عند بدء التشغيل الناجح مع الوقت المحلي
+def send_start_notification():
+    try:
+        import datetime
+        import pytz
+
+        # ضبط المنطقة الزمنية المحلية (ليبيا)
+        tz = pytz.timezone("Africa/Tripoli")
+        local_time = datetime.datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+
+        message = (
+            f"🔔 تم تشغيل النظام بنجاح 👁️‍🗨️\n"
+            f"✅ Smart AI Scanner يعمل الآن ويبدأ بمراقبة الفرص.\n"
+            f"🕒 التوقيت المحلي: {local_time}"
+        )
+
+        if hasattr(main, "send_telegram_message"):
+            main.send_telegram_message(message)
+            print("📩 تم إرسال إشعار بدء التشغيل إلى تليجرام.")
+        else:
+            print("⚠️ لم يتم العثور على دالة send_telegram_message في main.py.")
+    except Exception as e:
+        print("⚠️ فشل إرسال إشعار البدء:", e)
+
+# تشغيل إشعار التشغيل لمرة واحدة
+threading.Thread(target=send_start_notification, daemon=True).start()
 
 # تشغيل كل من العامل الرئيسي ونظام keep-alive في الخلفية
 threading.Thread(target=background_worker, daemon=True).start()
