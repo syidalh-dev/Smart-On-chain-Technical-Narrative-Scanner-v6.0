@@ -1,7 +1,5 @@
-flask
-gunicorn
-requests
-pandas
-numpy
-python-dateutil
-pytz
+Flask==2.2.5
+requests==2.32.5
+gunicorn==23.0.0
+pandas==2.3.3
+numpy==2.3.4
