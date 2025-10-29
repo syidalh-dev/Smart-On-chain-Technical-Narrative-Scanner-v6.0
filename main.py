@@ -179,17 +179,27 @@ def score_coin_light(symbol="BTCUSDT"):
         total_score = tech_score + social_score + onchain_score
         total_score = max(0, min(total_score, 1.0))
 
-        # 🔖 تصنيف الفرصة
+        # 🔖 تصنيف الفرصة + المدة المقترحة
         if total_score >= 0.7:
             label = "🚀 قوية جدًا (استثمار 1–2 أسبوع)"
+            suggested_holding = "احتفظ من 7 إلى 14 يوم"
         elif total_score >= 0.4:
             label = "📈 متوسطة (فرصة محتملة)"
+            suggested_holding = "احتفظ من 3 إلى 7 أيام"
         else:
             label = "⚠️ ضعيفة (للمراقبة فقط)"
+            suggested_holding = "راقب فقط، لا تدخل الآن"
 
-        print(f"✅ {symbol} => Score: {round(total_score, 2)} | {label}")
-        send_telegram_message(f"{label}\nرمز: {symbol}\nالنتيجة: {round(total_score,2)}")
-        save_smart_signal(symbol, total_score, label)
+        print(f"✅ {symbol} => Score: {round(total_score, 2)} | {label} | {suggested_holding}")
+
+        send_telegram_message(
+            f"{label}\n"
+            f"رمز: {symbol}\n"
+            f"النتيجة: {round(total_score,2)}\n"
+            f"⏳ <b>{suggested_holding}</b>"
+        )
+
+        save_smart_signal(symbol, total_score, f"{label} - {suggested_holding}")
         return total_score
 
     except Exception as e:
