@@ -42,3 +42,7 @@ threading.Thread(target=background_worker, daemon=True).start()
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "10000"))
     app.run(host="0.0.0.0", port=port)
+if __name__ == "__main__":
+    print("🚀 بدء تشغيل Smart AI Scanner Web Worker")
+    score_coin_light("BTCUSDT")
+    score_coin_light("ETHUSDT")
