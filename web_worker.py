@@ -30,6 +30,24 @@ def background_worker():
 
 threading.Thread(target=background_worker, daemon=True).start()
 
+# ===============================
+# 🔄 Ping Self Keep-Alive System
+# ===============================
+import threading
+import requests
+
+def keep_alive():
+    while True:
+        try:
+            url = os.getenv("RENDER_EXTERNAL_URL", "https://smart-on-chain-technical-narrative.onrender.com")
+            requests.get(url + "/ping", timeout=10)
+            print(f"💓 Keep-alive ping sent to {url}")
+        except Exception as e:
+            print("⚠️ Keep-alive error:", e)
+        time.sleep(300)  # كل 5 دقائق
+
+# تشغيل مهمة البقاء في الخلفية
+threading.Thread(target=keep_alive, daemon=True).start()
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "10000"))
     print("🚀 بدء تشغيل Smart AI Scanner Web Worker")
