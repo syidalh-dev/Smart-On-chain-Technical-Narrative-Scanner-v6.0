@@ -300,11 +300,13 @@ try:
     if has_recent_partnerships(symbol):
         score += 0.5
         print(f"🤝 New partnerships detected for {symbol}")
+            save_smart_signal(symbol, score, "تدفق أموال ذكي")
 
     holders_now = get_holders_growth("0x0000000000000000000000000000000000000000")
     if holders_now and holders_now > 1000:
         score += 0.3
         print(f"👥 Holders growth signal for {symbol}")
+            save_smart_signal(symbol, score, "تدفق أموال ذكي")
 
 except Exception as e:
     print(f"⚠️ smart_insights integration error for {symbol}:", e)
