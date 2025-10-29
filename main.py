@@ -154,6 +154,29 @@ def fetch_binance_klines(symbol="BTCUSDT", interval="4h", limit=200):
     df["c"] = pd.to_numeric(df["c"], errors="coerce")
     df["v"] = pd.to_numeric(df["v"], errors="coerce")
     return df
+    import json
+from datetime import datetime
+SMART_SIGNALS_FILE = "smart_signals.json"
+
+def save_smart_signal(symbol, score, reason):
+    try:
+        data = []
+        if os.path.exists(SMART_SIGNALS_FILE):
+            with open(SMART_SIGNALS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        new_entry = {
+            "symbol": symbol,
+            "score": score,
+            "reason": reason,
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        }
+        if not any(x["symbol"] == symbol for x in data):
+            data.append(new_entry)
+            with open(SMART_SIGNALS_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            print(f"💾 Saved smart signal: {symbol}")
+    except Exception as e:
+        print("⚠️ Error saving smart signal:", e)
 
 # ----------------------------- #
 # DEX Screener (عينات خفيفة)    #
@@ -258,6 +281,32 @@ def score_coin_light(row, kl_df, dex_map, defillama_map):
             trend = 1.0 if (ema50 > ema100 and hist_last > 0) else 0.0
             tech_score += 0.6 * trend
             tech_score += 0.4 * (1.0 if rsi_val > 55 else (0.5 if rsi_val > 48 else 0.0))
+            # ---------------------------------------------
+# 🔍 Smart Insights Integration (تحليل ذكي إضافي)
+# ---------------------------------------------
+try:
+    from smart_insights import detect_smart_money_flow, has_recent_partnerships, get_holders_growth
+
+    # افترض أن لديك series باسم close و vol ضمن المتغيرات المحلية
+    volume_now = float(vol.iloc[-1]) if 'vol' in locals() and len(vol) > 0 else 0.0
+    volume_week_ago = float(vol.iloc[-24]) if 'vol' in locals() and len(vol) > 24 else 0.0
+    price_7d_change = ((close.iloc[-1] - close.iloc[-24]) / max(1, close.iloc[-24])) * 100 if 'close' in locals() and len(close) > 24 else 0.0
+
+    if detect_smart_money_flow(volume_now, volume_week_ago, price_7d_change):
+        score += 0.5
+        print(f"🧠 Smart money flow detected for {symbol}")
+
+    if has_recent_partnerships(symbol):
+        score += 0.5
+        print(f"🤝 New partnerships detected for {symbol}")
+
+    holders_now = get_holders_growth("0x0000000000000000000000000000000000000000")
+    if holders_now and holders_now > 1000:
+        score += 0.3
+        print(f"👥 Holders growth signal for {symbol}")
+
+except Exception as e:
+    print(f"⚠️ smart_insights integration error for {symbol}:", e)
             # volume spike
             vol = kl_df["v"].astype(float)
             avg_vol = vol.rolling(30).mean().iloc[-1] if len(vol) >= 30 else vol.mean()
