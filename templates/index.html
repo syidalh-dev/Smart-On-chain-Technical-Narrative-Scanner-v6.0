@@ -1,52 +1,25 @@
+<!-- templates/index.html -->
 <!doctype html>
 <html lang="ar">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Smart AI Scanner — Dashboard</title>
-<style>
-body{font-family:system-ui,Segoe UI,Arial;direction:rtl;padding:12px;background:#f7fafc;color:#111}
-.card{background:#fff;padding:10px;margin:8px 0;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
-.header{display:flex;justify-content:space-between;align-items:center}
-.small{font-size:0.9rem;color:#666}
-.badge{background:#0ea5a4;color:#fff;padding:4px 8px;border-radius:999px}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Smart AI Scanner — لوحة العرض</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;direction:rtl;padding:18px;background:#f7f7f8;color:#111}
+    .card{background:#fff;padding:14px;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,0.06);max-width:760px;margin:12px auto}
+    h1{margin:0 0 8px;font-size:18px}
+    .meta{color:#555;font-size:14px}
+    .small{font-size:13px;color:#666;margin-top:8px}
+    a{color:#0366d6;text-decoration:none}
+  </style>
 </head>
 <body>
-<div class="card header">
-  <div>
-    <h2>📡 Smart AI Scanner</h2>
-    <div class="small">حالة الخدمة: <span id="status">جاري التحميل...</span></div>
+  <div class="card">
+    <h1>✅ Smart AI Scanner — لوحة العرض</h1>
+    <div class="meta">عدد العملات تحت المراقبة: <strong>{{ watch_count }}</strong></div>
+    <div class="meta">آخر تشغيل تقريبي: <strong>{{ last_run }}</strong></div>
+    <p class="small">هذه الواجهة خفيفة للعرض فقط — لا تجري عمليات تحليل ثقيلة هنا. الخادم قد يدخل وضع السكون على الخطة المجانية عندما لا يصل إليه زوار.</p>
   </div>
-  <div><span class="badge" id="watchcount">0</span> مراقبات</div>
-</div>
-
-<div id="signals"></div>
-
-<script>
-async function loadStatus(){
-  try{
-    const h = await fetch('/_healthz'); const js = await h.json();
-    document.getElementById('status').textContent = js.status || 'ok';
-    document.getElementById('watchcount').textContent = js.watch_count || 0;
-  }catch(e){ document.getElementById('status').textContent='خطأ'; }
-}
-async function loadSignals(){
-  try{
-    const r = await fetch('/signals');
-    const data = await r.json();
-    const cont = document.getElementById('signals');
-    if(!data || data.length===0){ cont.innerHTML='<div class="card">لا توجد إشارات محفوظة</div>'; return;}
-    cont.innerHTML = data.slice(0,20).map(s=>{
-      return `<div class="card"><strong>${s.symbol}</strong> — ${s.reason} — درجة: ${s.score} — <div class="small">${s.ts}</div></div>`;
-    }).join('');
-  }catch(e){
-    document.getElementById('signals').innerHTML='<div class="card">خطأ في جلب الإشارات</div>';
-  }
-}
-loadStatus(); loadSignals();
-setInterval(loadStatus, 60*1000);
-setInterval(loadSignals, 90*1000);
-</script>
 </body>
 </html>
