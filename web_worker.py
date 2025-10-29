@@ -28,9 +28,18 @@ def health():
         count = len(main.load_json(main.WATCHLIST_FILE)) if hasattr(main, "WATCHLIST_FILE") else 0
     except Exception:
         count = 0
-    return jsonify({"status":"ok","watch_count": count})
+    return jsonify({"status": "ok", "watch_count": count})
 
-# تشغيل الكود الرئيسي في خيط الخلفية
+# 🔁 إبقاء التطبيق نشطًا على Render (self-ping)
+def keep_alive():
+    while True:
+        try:
+            requests.get(f"https://{os.getenv('RENDER_EXTERNAL_URL', 'localhost')}/ping", timeout=5)
+        except Exception:
+            pass
+        time.sleep(300)  # كل 5 دقائق
+
+# 🚀 تشغيل الكود الرئيسي في الخلفية
 def background_worker():
     try:
         main.main_loop()
@@ -38,11 +47,9 @@ def background_worker():
         print("⚠️ background_worker error:", e)
 
 threading.Thread(target=background_worker, daemon=True).start()
+threading.Thread(target=keep_alive, daemon=True).start()
 
 if __name__ == "__main__":
+    print("🚀 بدء تشغيل Smart AI Scanner Web Worker")
     port = int(os.environ.get("PORT", "10000"))
     app.run(host="0.0.0.0", port=port)
-if __name__ == "__main__":
-    print("🚀 بدء تشغيل Smart AI Scanner Web Worker")
-    score_coin_light("BTCUSDT")
-    score_coin_light("ETHUSDT")
