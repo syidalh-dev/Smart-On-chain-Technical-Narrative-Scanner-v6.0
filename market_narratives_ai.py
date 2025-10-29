@@ -4,11 +4,12 @@ from main import send_telegram_message
 
 def analyze_market_narratives_ai():
     """
-    تحليل سرديات السوق باستخدام ذكاء اصطناعي خفيف مدمج
-    دون استهلاك موارد خارجية أو واجهات مدفوعة.
+    تحليل سرديات السوق باستخدام مصادر موثوقة
+    (CoinMarketCap + CoinGecko + CoinMarketCal)
+    دون الحاجة إلى مفاتيح API.
     """
     try:
-        sources = {}
+        sources = {"cmc": [], "coingecko": [], "coinmarketcal": []}
         insights = []
 
         # --- CoinMarketCap ---
@@ -17,10 +18,10 @@ def analyze_market_narratives_ai():
                 "https://api.coinmarketcap.com/data-api/v3/cryptocurrency/trending",
                 timeout=10
             ).json()
-            cmc_coins = [c["name"].lower() for c in cmc["data"]["coins"]]
+            cmc_coins = [c["name"].lower() for c in cmc.get("data", {}).get("coins", [])]
             sources["cmc"] = cmc_coins
-        except Exception:
-            sources["cmc"] = []
+        except Exception as e:
+            print(f"⚠️ CoinMarketCap error: {e}")
 
         # --- CoinGecko ---
         try:
@@ -30,19 +31,21 @@ def analyze_market_narratives_ai():
             ).json()
             cg_coins = [c["item"]["name"].lower() for c in cg.get("coins", [])]
             sources["coingecko"] = cg_coins
-        except Exception:
-            sources["coingecko"] = []
+        except Exception as e:
+            print(f"⚠️ CoinGecko error: {e}")
 
-        # --- CoinMarketCal ---
+        # --- CoinMarketCal (بديل آمن لـ CoinMarketCall) ---
         try:
             cmcal = requests.get(
-                "https://developers.coinmarketcal.com/v1/events?max=10",
+                "https://api.coinmarketcal.com/v1/events?max=10",
+                headers={"Accept": "application/json"},
                 timeout=10
             ).json()
-            cal_events = [e["title"].lower() for e in cmcal.get("body", [])]
+            events = cmcal.get("body") or cmcal.get("data") or []
+            cal_events = [e.get("title", "").lower() for e in events if isinstance(e, dict)]
             sources["coinmarketcal"] = cal_events
-        except Exception:
-            sources["coinmarketcal"] = []
+        except Exception as e:
+            print(f"⚠️ CoinMarketCal error: {e}")
 
         # جمع وتحليل السرديات
         all_text = " ".join(sum(sources.values(), []))
@@ -53,7 +56,7 @@ def analyze_market_narratives_ai():
 
         insights = [f"{k.upper()} 🔥 ({v} mentions)" for k, v in top_narratives if v > 0]
 
-        # إرسال تلغرام
+        # إرسال تلغرام إذا وُجدت نتائج
         if insights:
             message = "🧠 <b>تحليل السرديات الذكي</b>\n" + "\n".join(insights)
             print(message)
