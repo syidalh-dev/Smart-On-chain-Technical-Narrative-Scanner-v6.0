@@ -1,4 +1,7 @@
 # web_worker.py
+import json
+import os
+from flask import render_template_string
 from flask import Flask, jsonify
 import threading
 import main  # يفترض أن main.py في نفس المجلد ويحتوي على main_loop()
