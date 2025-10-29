@@ -295,6 +295,7 @@ try:
     if detect_smart_money_flow(volume_now, volume_week_ago, price_7d_change):
         score += 0.5
         print(f"🧠 Smart money flow detected for {symbol}")
+            save_smart_signal(symbol, score, "تدفق أموال ذكي")
 
     if has_recent_partnerships(symbol):
         score += 0.5
