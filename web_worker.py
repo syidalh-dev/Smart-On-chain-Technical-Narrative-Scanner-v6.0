@@ -93,7 +93,54 @@ threading.Thread(target=send_start_notification, daemon=True).start()
 # تشغيل كل من العامل الرئيسي ونظام keep-alive في الخلفية
 threading.Thread(target=background_worker, daemon=True).start()
 threading.Thread(target=smart_keep_alive, daemon=True).start()
-
+@app.route("/signals")
+def show_signals():
+    try:
+        if not os.path.exists("smart_signals.json"):
+            return "<h3>📭 لا توجد فرص ذكية بعد.</h3>"
+        with open("smart_signals.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+        html = """
+        <html lang="ar" dir="rtl">
+        <head>
+            <meta charset="utf-8">
+            <title>📊 Smart AI Signals</title>
+            <style>
+                body { font-family: 'Cairo', sans-serif; background:#111; color:#eee; padding:20px; }
+                h1 { color:#00ffcc; }
+                table { width:100%; border-collapse: collapse; margin-top:20px; }
+                th, td { border:1px solid #333; padding:10px; text-align:center; }
+                th { background:#222; color:#00ffcc; }
+                tr:nth-child(even) { background:#1a1a1a; }
+                .high { color:#00ff66; font-weight:bold; }
+                .medium { color:#ffcc00; }
+                .low { color:#ff4444; }
+            </style>
+        </head>
+        <body>
+            <h1>🤖 الفرص الذكية المكتشفة</h1>
+            <table>
+                <tr>
+                    <th>الرمز</th>
+                    <th>الدرجة</th>
+                    <th>السبب</th>
+                    <th>التاريخ</th>
+                </tr>
+                {% for s in data %}
+                <tr>
+                    <td>{{ s.symbol }}</td>
+                    <td class="{% if s.score >= 2.5 %}high{% elif s.score >= 1.5 %}medium{% else %}low{% endif %}">{{ s.score }}</td>
+                    <td>{{ s.reason }}</td>
+                    <td>{{ s.timestamp }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </body>
+        </html>
+        """
+        return render_template_string(html, data=data)
+    except Exception as e:
+        return f"<b>⚠️ خطأ:</b> {e}"
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "10000"))
     app.run(host="0.0.0.0", port=port)
