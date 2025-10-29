@@ -159,3 +159,15 @@ if __name__ == "__main__":
         except Exception as e:
             print("⚠️ خطأ في الدورة:", e)
             time.sleep(30)
+            def main_loop():
+    print("🔁 Starting Smart AI Scanner main loop...")
+    while True:
+        try:
+            # استدعاء الدوال أو التحليلات التي تقوم بها عادة هنا
+            scan_and_analyze()  # مثال — غيّرها حسب اسم دالتك الفعلية
+            time.sleep(300)  # كل 5 دقائق
+        except Exception as e:
+            print("⚠️ Error in main_loop:", e)
+            time.sleep(60)
+            if __name__ == "__main__":
+    main_loop()
