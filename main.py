@@ -1,265 +1,154 @@
-import os
 import time
 import json
 import requests
-import traceback
-import zoneinfo
-from datetime import datetime, timedelta
-from smart_insights import detect_smart_money_flow, has_recent_partnerships, get_holders_growth
+import statistics
+from datetime import datetime, timedelta, timezone
+from market_sentiment_ai import analyze_market_sentiment_ai
+from smart_money import detect_smart_money_flow, get_holders_growth, has_recent_partnerships
 
 # ==============================
-# الإعدادات العامة
+# إعدادات عامة
 # ==============================
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "YOUR_TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID")
-SAVE_FILE = "smart_signals.json"
 WATCHLIST_FILE = "watchlist.json"
-
-LOCAL_TZ = zoneinfo.ZoneInfo("Africa/Tripoli")
-last_sentiment_update = datetime.utcnow() - timedelta(hours=6)
-LAST_DAILY_SEND = None
-
-MONITOR_DAYS = 3
-DAILY_SEND_HOUR = 6
+TELEGRAM_TOKEN = "YOUR_TELEGRAM_TOKEN"
+TELEGRAM_CHAT_ID = "YOUR_CHAT_ID"
 
 # ==============================
-# أدوات مساعدة للتوقيت والتخزين
+# أدوات مساعدة
 # ==============================
 def now_local():
-    return datetime.now(LOCAL_TZ)
+    return datetime.now(timezone.utc)
 
-def load_json(path):
-    if os.path.exists(path):
-        try:
-            return json.load(open(path, "r", encoding="utf-8"))
-        except Exception:
-            return []
-    return []
-
-def save_json(path, data):
-    try:
-        json.dump(data, open(path, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
-    except Exception as e:
-        print("⚠️ save_json error:", e)
-
-# ==============================
-# دوال مساعدة عامة
-# ==============================
 def send_telegram_message(text):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}
         requests.post(url, json=payload, timeout=10)
     except Exception as e:
-        print("⚠️ Telegram error:", e)
+        print("⚠️ Telegram send error:", e)
 
-def get_klines(symbol="BTCUSDT", interval="1h", limit=100):
+def load_json(path):
     try:
-        url = "https://api.binance.com/api/v3/klines"
-        params = {"symbol": symbol, "interval": interval, "limit": limit}
-        r = requests.get(url, params=params, timeout=10)
-        data = r.json()
-        return [{"t": float(i[0]), "o": float(i[1]), "h": float(i[2]),
-                 "l": float(i[3]), "c": float(i[4]), "v": float(i[5])} for i in data]
-    except Exception as e:
-        print(f"⚠️ Binance error: {e}")
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
         return []
 
+def save_json(path, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 # ==============================
-# تحليل الاتجاه العام للسوق
+# التحليل الفني الذكي
 # ==============================
-def get_market_sentiment():
-    sentiment_score = 0
+def analyze_coin(coin_id):
+    """
+    تحليل فني أساسي (CoinGecko) + مؤشرات نمو + تدفق الأموال
+    """
     try:
-        cmc_news = requests.get("https://api.coinmarketcap.com/content/v3/news", timeout=10).json()
-        headlines = " ".join([n["meta"]["title"] for n in cmc_news.get("data", [])[:20]])
-        try:
-            cmc_call = requests.get("https://api.coinmarketcall.com/v1/analysis/latest", timeout=10).json()
-            calls = " ".join([c.get("title", "") for c in cmc_call.get("data", [])[:20]])
-        except Exception as e:
-            print(f"⚠️ CoinMarketCall error fallback: {e}")
-            calls = ""
-        combined_text = (headlines + " " + calls).lower()
-        pos_words = ["bullish", "buy", "positive", "uptrend", "growth"]
-        neg_words = ["bearish", "sell", "negative", "downtrend", "fear"]
-        pos = sum(w in combined_text for w in pos_words)
-        neg = sum(w in combined_text for w in neg_words)
-        if pos > neg:
-            sentiment_score, sentiment = 0.2, "🟢 الاتجاه العام إيجابي"
-        elif neg > pos:
-            sentiment_score, sentiment = -0.2, "🔴 الاتجاه العام سلبي"
-        else:
-            sentiment_score, sentiment = 0.0, "⚪ الاتجاه العام محايد"
-        print(f"📰 Market Sentiment: {sentiment_score} | {sentiment}")
-        return sentiment_score, sentiment
+        url = f"https://api.coingecko.com/api/v3/coins/{coin_id}?localization=false&tickers=false&market_data=true"
+        data = requests.get(url, timeout=10).json()
+        md = data.get("market_data", {})
+        price = md.get("current_price", {}).get("usd", 0)
+        vol_now = md.get("total_volume", {}).get("usd", 0)
+        price_7d = md.get("price_change_percentage_7d", 0)
+        price_24h = md.get("price_change_percentage_24h", 0)
+
+        # تحليل الذكاء الاصطناعي الذكي للسلوك السعري
+        vol_prev = vol_now / 3 if vol_now else 0
+        smart_flow = detect_smart_money_flow(vol_now, vol_prev, price_7d)
+        holders_growth = get_holders_growth(coin_id)
+        partnership = has_recent_partnerships(coin_id)
+
+        score = 0
+        if smart_flow: score += 2
+        if holders_growth > 0: score += 1
+        if partnership: score += 1
+        if price_7d > 5: score += 1
+        if price_24h > 0: score += 0.5
+
+        duration = "قصيرة (3-5 أيام)" if price_7d > 10 else \
+                   "متوسطة (7-14 يوم)" if smart_flow else \
+                   "طويلة (15-30 يوم)"
+
+        return {
+            "coin": coin_id,
+            "price": price,
+            "score": round(score, 2),
+            "duration": duration,
+            "holders_growth": round(holders_growth, 2),
+            "smart_flow": smart_flow,
+            "partnership": partnership,
+            "price_7d": price_7d,
+            "price_24h": price_24h
+        }
     except Exception as e:
-        print("⚠️ Market Sentiment error:", e)
-        return 0, "⚠️ تعذر تحليل السوق"
-
-# ==============================
-# إدارة المراقبة Watchlist
-# ==============================
-def add_to_watchlist(symbol, score, investment_duration):
-    w = load_json(WATCHLIST_FILE)
-    for x in w:
-        if x["symbol"] == symbol:
-            x["last_score"] = score
-            x["investment_duration"] = investment_duration
-            x["monitor_cycles"] = x.get("monitor_cycles", 0) + 1
-            x["last_seen"] = now_local().isoformat()
-            save_json(WATCHLIST_FILE, w)
-            return
-    w.append({
-        "symbol": symbol,
-        "added_at": now_local().isoformat(),
-        "monitor_cycles": 1,
-        "last_score": score,
-        "investment_duration": investment_duration,
-        "last_seen": now_local().isoformat()
-    })
-    save_json(WATCHLIST_FILE, w)
-
-def prune_watchlist():
-    w = load_json(WATCHLIST_FILE)
-    new_w, now_t = [], now_local()
-    for x in w:
-        added = datetime.fromisoformat(x["added_at"])
-        if (now_t - added).days >= MONITOR_DAYS and x.get("last_score", 0) < 0.5:
-            print(f"🧹 إزالة {x['symbol']} بعد {MONITOR_DAYS} أيام دون تحسن.")
-            continue
-        new_w.append(x)
-    save_json(WATCHLIST_FILE, new_w)
-
-# ==============================
-# إرسال تقرير صباحي الساعة 6
-# ==============================
-def maybe_send_daily_summary():
-    global LAST_DAILY_SEND
-    now = now_local()
-    today = now.date().isoformat()
-    if now.hour >= DAILY_SEND_HOUR and LAST_DAILY_SEND != today:
-        signals = load_json(SAVE_FILE)
-        day_ago = (now - timedelta(days=1)).isoformat()
-        recent = [s for s in signals if s.get("timestamp", "") >= day_ago]
-        if not recent:
-            msg = "📰 ملخص اليوم: لا توجد إشارات جديدة خلال الـ24 ساعة الماضية."
-        else:
-            msg = "📰 <b>ملخص اليوم</b>\n\n"
-            for r in sorted(recent, key=lambda x: x.get("score", 0), reverse=True)[:10]:
-                label = "🚀" if r["score"] >= 0.7 else "📈" if r["score"] >= 0.4 else "⚠️"
-                duration = "7–14 يوم" if r["score"] >= 0.7 else "3–7 أيام" if r["score"] >= 0.4 else "مراقبة"
-                msg += f"{label} {r['symbol']} | درجة: {r['score']*100:.0f}% | مدة الاستثمار: {duration}\n"
-        send_telegram_message(msg)
-        LAST_DAILY_SEND = today
-        print("✅ تم إرسال تقرير صباحي.")
-
-# ==============================
-# التحليل الفني والذكاء الاصطناعي
-# ==============================
-def score_coin_light(symbol="BTCUSDT"):
-    global last_sentiment_update
-    try:
-        kl = get_klines(symbol)
-        if not kl:
-            print(f"⚠️ لا توجد بيانات للرمز {symbol}")
-            return None
-
-        kl_df = {k: [i[k] for i in kl] for k in kl[0].keys()}
-        tech_score, social_score, onchain_score = 0, 0, 0
-
-        if (datetime.utcnow() - last_sentiment_update).total_seconds() > 6 * 3600:
-            market_score, sentiment_text = get_market_sentiment()
-            send_telegram_message(f"🧭 <b>تحديث السوق</b>\n{sentiment_text}")
-            last_sentiment_update = datetime.utcnow()
-        else:
-            market_score, _ = get_market_sentiment()
-
-        if market_score > 0:
-            social_score += 0.1
-        elif market_score < 0:
-            social_score -= 0.1
-
-        vol = kl_df["v"]
-        closes = kl_df["c"]
-        if len(closes) < 50:
-            return None
-
-        v_now = float(vol[-1])
-        v_prev = float(vol[-24]) if len(vol) > 24 else 0.0
-        p_change = ((closes[-1] - closes[-24]) / max(1, closes[-24])) * 100
-
-        if detect_smart_money_flow(v_now, v_prev, p_change):
-            tech_score += 0.2
-        if has_recent_partnerships(symbol):
-            social_score += 0.2
-        holders_growth = get_holders_growth(symbol)
-        if holders_growth and holders_growth > 1000:
-            onchain_score += 0.2
-
-        ma20 = sum(closes[-20:]) / 20
-        ma50 = sum(closes[-50:]) / 50
-        if ma20 > ma50:
-            tech_score += 0.15
-
-        gains = [closes[i+1] - closes[i] for i in range(len(closes)-1) if closes[i+1] > closes[i]]
-        losses = [closes[i] - closes[i+1] for i in range(len(closes)-1) if closes[i+1] < closes[i]]
-        avg_gain = sum(gains[-14:]) / max(1, len(gains[-14:]))
-        avg_loss = sum(losses[-14:]) / max(1, len(losses[-14:]))
-        rsi = 100 - (100 / (1 + (avg_gain / max(1e-6, avg_loss))))
-        if rsi > 55:
-            tech_score += 0.15
-        elif rsi < 40:
-            tech_score -= 0.1
-
-        total = max(0, min(tech_score + social_score + onchain_score, 1.0))
-
-        if total >= 0.7:
-            label, hold = "🚀 قوية جدًا (استثمار 1–2 أسبوع)", "7–14 يوم"
-        elif total >= 0.4:
-            label, hold = "📈 متوسطة (فرصة محتملة)", "3–7 أيام"
-        else:
-            label, hold = "⚠️ ضعيفة (للمراقبة فقط)", "مراقبة"
-
-        add_to_watchlist(symbol, total, hold)
-
-        msg = f"{label}\nرمز: {symbol}\nالنتيجة: {total:.2f}\n⏳ <b>مدة الاستثمار:</b> {hold}"
-        print(f"✅ {symbol} | {total:.2f} | {label}")
-
-        if total >= 0.7:
-            send_telegram_message(msg)
-
-        data = load_json(SAVE_FILE)
-        data.append({"symbol": symbol, "score": round(total, 2),
-                     "timestamp": datetime.utcnow().isoformat(),
-                     "investment_duration": hold})
-        save_json(SAVE_FILE, data)
-        return total
-
-    except Exception as e:
-        print("❌ خطأ:", e)
-        traceback.print_exc()
+        print(f"⚠️ analyze_coin error for {coin_id}: {e}")
         return None
 
 # ==============================
-# الحلقة الرئيسية
+# دورة التحليل الكاملة
 # ==============================
 def main_loop():
-    print("🔔 Smart AI Scanner يعمل الآن ✅")
-    symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "AVAXUSDT"]
-    while True:
+    print("🚀 بدء التحليل الذكي للسوق ...")
+    watchlist = load_json(WATCHLIST_FILE)
+    results = []
+
+    # تحليل السرديات والأخبار العامة
+    narratives = analyze_market_sentiment_ai()
+    if not narratives:
+        print("⚙️ لا توجد سرديات نشطة حالياً.")
+        return
+
+    # تحليل كل عملة في السرديات النشطة
+    for narr in narratives:
         try:
-            for sym in symbols:
-                score_coin_light(sym)
-                time.sleep(5)
-            prune_watchlist()
-            maybe_send_daily_summary()
-            time.sleep(6 * 3600)  # ⏰ كل 6 ساعات تحليل جديد
-        except KeyboardInterrupt:
-            print("⏹️ تم إيقاف النظام يدويًا.")
-            break
+            coins = ["bitcoin", "ethereum", "solana", "injective-protocol", "render-token", "celestia"]
+            for c in coins:
+                info = analyze_coin(c)
+                if info and info["score"] >= 2.5:
+                    results.append(info)
+                    watchlist.append({
+                        "coin": c,
+                        "ts": now_local().isoformat(),
+                        "score": info["score"],
+                        "duration": info["duration"]
+                    })
         except Exception as e:
-            print("⚠️ خطأ في الدورة:", e)
-            time.sleep(30)
+            print("⚠️ Narrative coin scan error:", e)
+
+    # حفظ النتائج
+    save_json(WATCHLIST_FILE, watchlist)
+
+    # إرسال النتائج
+    if results:
+        message = "📊 <b>نتائج التحليل الذكي (كل 6 ساعات)</b>\n\n"
+        for r in results:
+            message += f"• {r['coin'].upper()} — {r['duration']} 🕒\n"
+            message += f"  💹 7d: {r['price_7d']}% | 24h: {r['price_24h']}%\n"
+            message += f"  💧 Smart Flow: {r['smart_flow']} | Holders↑: {r['holders_growth']}\n\n"
+        send_telegram_message(message)
+        print(message)
+    else:
+        print("📭 لا توجد فرص واضحة حالياً.")
+
+# ==============================
+# جدولة العمل التلقائي
+# ==============================
+def scheduler():
+    while True:
+        now = datetime.now().time()
+
+        # تحليل السوق كل 6 ساعات
+        main_loop()
+
+        # تقرير صباحي 6:00
+        if now.hour == 6:
+            send_telegram_message("🌅 <b>تقرير السوق الصباحي</b> تم توليده تلقائياً ✅")
+
+        time.sleep(6 * 3600)  # كل 6 ساعات
+
 
 if __name__ == "__main__":
-    main_loop()
+    print("🤖 تشغيل Smart AI Market Scanner ...")
+    scheduler()
