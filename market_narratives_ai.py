@@ -1,70 +1,42 @@
 import requests
-from datetime import datetime
 from main import send_telegram_message
 
 def analyze_market_narratives_ai():
     """
-    تحليل سرديات السوق باستخدام ذكاء اصطناعي خفيف مدمج
-    دون استهلاك موارد خارجية أو واجهات مدفوعة.
+    تحليل السرديات الشائعة في السوق بشكل خفيف وذكي
+    عبر عدة مصادر مجانية.
     """
     try:
         sources = {}
-        insights = []
 
-        # --- CoinMarketCap ---
+        # 🔹 CoinGecko
         try:
-            cmc = requests.get(
-                "https://api.coinmarketcap.com/data-api/v3/cryptocurrency/trending",
-                timeout=10
-            ).json()
-            cmc_coins = [c["name"].lower() for c in cmc["data"]["coins"]]
-            sources["cmc"] = cmc_coins
-        except Exception:
-            sources["cmc"] = []
-
-        # --- CoinGecko ---
-        try:
-            cg = requests.get(
-                "https://api.coingecko.com/api/v3/search/trending",
-                timeout=10
-            ).json()
+            cg = requests.get("https://api.coingecko.com/api/v3/search/trending", timeout=10).json()
             cg_coins = [c["item"]["name"].lower() for c in cg.get("coins", [])]
             sources["coingecko"] = cg_coins
         except Exception:
             sources["coingecko"] = []
 
-        # --- CoinMarketCal (الأحداث القادمة) ---
+        # 🔹 CoinPaprika (بديل CoinMarketCal)
         try:
-            cmcal = requests.get(
-                "https://developers.coinmarketcal.com/v1/events?max=10",
-                headers={"Accept-Encoding": "deflate", "x-api-key": "sample"},
-                timeout=10
-            ).json()
-            cal_events = [e.get("title", "").lower() for e in cmcal.get("body", []) if isinstance(e, dict)]
-            sources["coinmarketcal"] = cal_events
-        except Exception as e:
-            print(f"⚠️ CoinMarketCal fetch failed: {e}")
-            sources["coinmarketcal"] = []
+            paprika = requests.get("https://api.coinpaprika.com/v1/coins", timeout=10).json()
+            paprika_coins = [c["name"].lower() for c in paprika[:50]]
+            sources["coinpaprika"] = paprika_coins
+        except Exception:
+            sources["coinpaprika"] = []
 
-        # --- تحليل السرديات ---
         all_text = " ".join(sum(sources.values(), []))
         keywords = ["ai", "defi", "rwa", "gaming", "layer2", "meme", "social", "infrastructure"]
-
         scores = {k: all_text.count(k) for k in keywords}
-        top_narratives = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:3]
+        top = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:3]
 
-        insights = [f"{k.upper()} 🔥 ({v} mentions)" for k, v in top_narratives if v > 0]
+        insights = [f"{k.upper()} 🔥 ({v} mentions)" for k, v in top if v > 0]
 
-        # --- إرسال إلى تلغرام ---
         if insights:
-            message = "🧠 <b>تحليل السرديات الذكي</b>\n" + "\n".join(insights)
-            print(message)
+            message = "🧠 <b>السرديات النشطة</b>\n" + "\n".join(insights)
             send_telegram_message(message)
-        else:
-            print("⚙️ لا توجد سرديات نشطة حالياً.")
-
         return insights
 
     except Exception as e:
-        print("⚠️ Narrative AI analysis error:", e)
+        print("⚠️ narrative_ai error:", e)
         return []
